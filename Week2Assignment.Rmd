@@ -1,0 +1,103 @@
+---
+title: "AssignmentWeek2"
+author: "NguyenDuy"
+date: "16 November 2016"
+output: html_document
+---
+```{r echo = FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE)
+```
+## Loading and proprocessing the data
+Load the data
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+temporaryFiles <- tempfile()
+download.file(url = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip",temporaryFiles)
+activityRaw <- read.csv(unz(temporaryFiles, "activity.csv"))
+activity <- activityRaw[!is.na(activityRaw[,1]), ]
+unlink(temporaryFiles)
+```
+Process the data into suitable format
+```{r}
+tbl_df(activity) %>% group_by(date) -> activity2
+```
+
+##Mean total number of steps taken per day
+Histogram of total number of steps taken each day
+```{r}
+activitySum <- summarise(activity2, sum(steps))
+hist(activitySum[,2][[1]], main = "Histogram of step each day", xlab = "Number of step")
+```
+
+Mean and median of the total number of steps taken per day
+```{r}
+mean(activitySum[,2][[1]], na.rm = TRUE)
+median(activitySum[,2][[1]], na.rm = TRUE)
+```
+
+##Average daily activity pattern
+```{r}
+activity3 <- group_by(activity, interval)
+intervalMean <- summarise(activity3, mean(steps, na.rm = TRUE))
+plot(intervalMean[,2][[1]], type = "l", main = "Average daily pattern activity", xlab = "5-minute interval", ylab = "Average number of steps")
+```
+
+Interval that has maximum number of steps taken 
+```{r}
+intervalMean[intervalMean[,2] == max(intervalMean[,2]),1][[1]]
+```
+
+##Input missing values
+Number of missing data
+```{r}
+dim(activityRaw[which(is.na(activityRaw[,1])), ])[1]
+```
+
+Missing data is proxied by average data of interval 
+```{r}
+activityRaw[which(is.na(activityRaw[,1])), ] %>% 
+        mutate(location = which(is.na(activityRaw[,1]))) -> NAData
+NAData[,1] <- sapply(NAData[,3], function(x)
+        {intervalMean[which(intervalMean[,1][[1]] == x),2][[1]]})
+activityProxied <- activityRaw
+activityProxied[NAData$location, 1] <- NAData$steps
+```
+
+Histogram of total number of steps taken each day for new data set
+```{r}
+group_by(activityProxied, date) %>% summarise(sum(steps)) -> activityProxiedSum
+par(mfrow = c(1,2))
+hist(activityProxiedSum[,2][[1]], main = "Histogram of step each day \n(with proxied data)", xlab = "Number of step")
+hist(activitySum[,2][[1]], main = "Histogram of step each day\n (without proxied data)", xlab = "Number of step")
+```
+
+Mean and median data with proxies
+```{r}
+mean(activityProxiedSum[,2][[1]])
+median(activityProxiedSum[,2][[1]])
+```
+Mean and median data without proxies
+```{r}
+mean(activitySum[,2][[1]])
+median(activitySum[,2][[1]])
+```
+The means are not different between proxied and non-proxied data. However, the medians are different.
+
+
+##Differences in activity patterns between weekdays and weekends
+```{r}
+activity4 <- mutate(activityProxied, daytype = weekdays(ymd(activityProxied$date)))
+activity4[(activity4$daytype == "Sunday"| activity4$daytype == "Saturday"), "daytype"] <- "weekend"
+activity4[activity4$daytype != "weekend", "daytype"] <- "weekday"
+activity4 <- group_by(activity4, daytype, interval)
+daytypeIntMean <- summarise(activity4, mean(steps))
+colnames(daytypeIntMean) <- c("daytype", "interval", "averageStep")
+qplot(x = interval, y = averageStep, data = daytypeIntMean, 
+      facets = daytype~., geom = "line", main = "Average Step during Weekday or Weekend", ylab = "Average Step")
+```
+
+##End of analysis
+
